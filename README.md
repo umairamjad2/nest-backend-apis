@@ -1,126 +1,337 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# NestJS Backend – Authentication & User Management
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A backend learning project built with **NestJS, TypeScript, PostgreSQL, and Prisma ORM**. This project implements user management, secure authentication, JWT access and refresh tokens, and role-based authorization.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Tech Stack
 
-## Description
+- **NestJS** – Backend framework
+- **TypeScript** – Programming language
+- **PostgreSQL** – Relational database
+- **Prisma ORM** – Database management
+- **JWT** – Authentication
+- **Passport.js** – Authentication strategy
+- **Bcrypt** – Password and refresh token hashing
+- **Class Validator** – Request validation
+- **pnpm** – Package manager
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Features
 
-## Project setup
+### 1. User Management (CRUD)
 
-```bash
-$ pnpm install
-```
+- Create users
+- Get all users
+- Get a user by ID
+- Update user details
+- Delete users
+- Validate incoming request data
+- Store user information in PostgreSQL
 
-## Compile and run the project
+### 2. Authentication
 
-```bash
-# development
-$ pnpm run start
+- User login with email and password
+- Password hashing using bcrypt
+- JWT-based authentication
+- Protected API endpoints
+- Secure token verification
 
-# watch mode
-$ pnpm run start:dev
+### 3. Access & Refresh Tokens
 
-# production mode
-$ pnpm run start:prod
-```
+| Token | Expiration | Purpose |
+|---|---|---|
+| Access Token | 15 minutes | Access protected APIs |
+| Refresh Token | 7 days | Generate new access tokens |
 
-## Run tests
+Implemented security features:
 
-```bash
-# unit tests
-$ pnpm run test
+- Separate access and refresh token secrets
+- Refresh token hashing and database storage
+- Refresh token verification
+- Refresh token rotation
+- Refresh token revocation on logout
+- Immediate access token invalidation using token versioning
 
-# e2e tests
-$ pnpm run test:e2e
+### 4. Role-Based Access Control (RBAC)
 
-# test coverage
-$ pnpm run test:cov
-```
+Two user roles are supported:
 
-## Deployment
+- **ADMIN** – Access to administrator-protected endpoints
+- **USER** – Access to regular user functionality
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+Implemented using:
+- Custom `@Roles()` decorator
+- `RolesGuard`
+- `JwtAuthGuard`
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### 5. Request Validation
 
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
-```
+Uses `class-validator`, `class-transformer`, and NestJS `ValidationPipe` to validate incoming requests and reject unexpected properties.
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Project Setup
 
-## Observability
+### Prerequisites
 
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
+Make sure you have installed:
 
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
+- Node.js
+- pnpm
+- PostgreSQL
+- Git
 
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-This project is already instrumented. To connect it, run this and approve the code it prints at [observe.nestjs.com/link](https://observe.nestjs.com/link) - signing up for free if you have no account:
+### 1. Clone the repository
 
 ```bash
-$ npx @nestjs/observe link
+git clone YOUR_REPOSITORY_URL
+cd nestjs-learning
 ```
 
-It writes the app key and secret into `.env` and makes every `nest start` script (`start`, `start:dev`, `start:debug`) load it. In production, set `OBSERVE_APP_KEY` and `OBSERVE_APP_SECRET` in the environment instead.
+### 2. Install dependencies
 
-Or do it by hand: create an application and an API key at [observe.nestjs.com](https://observe.nestjs.com), and set the pair as `OBSERVE_APP_KEY` and `OBSERVE_APP_SECRET` in the environment the app runs in.
+```bash
+pnpm install
+```
 
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
+### 3. Configure environment variables
 
-## Resources
+Create a `.env` file in the project root:
 
-Check out a few resources that may come in handy when working with NestJS:
+```env
+DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/nestjs_learning?schema=public"
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+JWT_ACCESS_SECRET="YOUR_ACCESS_SECRET"
+JWT_REFRESH_SECRET="YOUR_REFRESH_SECRET"
+```
 
-## Support
+Generate secure JWT secrets using:
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+```bash
+node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+```
 
-## Stay in touch
+Run the command twice to generate two different secrets.
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+**Important:** Never commit your `.env` file or expose your JWT secrets.
+
+### 4. Set up the database
+
+Create a PostgreSQL database named:
+
+```text
+nestjs_learning
+```
+
+Run Prisma migrations:
+
+```bash
+pnpm exec prisma migrate dev
+```
+
+Generate Prisma Client:
+
+```bash
+pnpm exec prisma generate
+```
+
+### 5. Start the application
+
+Development mode:
+
+```bash
+pnpm start:dev
+```
+
+The application will run on:
+
+```text
+http://localhost:3000
+```
+
+## API Endpoints
+
+### Authentication
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/auth/login` | Authenticate a user |
+| POST | `/auth/refresh` | Generate new tokens |
+| POST | `/auth/logout` | Log out and revoke tokens |
+| GET | `/auth/profile` | Get authenticated user profile |
+| GET | `/auth/admin` | Admin-only endpoint |
+
+### User Management
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/users` | Create a user |
+| GET | `/users` | Get all users |
+| GET | `/users/:id` | Get user by ID |
+| PATCH | `/users/:id` | Update user |
+| DELETE | `/users/:id` | Delete user |
+
+Protected endpoints require an access token in the Authorization header:
+
+```http
+Authorization: Bearer YOUR_ACCESS_TOKEN
+```
+
+### Refresh Token Request
+
+Send the refresh token in the request body:
+
+```json
+{
+  "refreshToken": "YOUR_REFRESH_TOKEN"
+}
+```
+
+Endpoint:
+
+```http
+POST /auth/refresh
+```
+
+## Authentication Flow
+
+1. User registers with their details.
+2. Password is hashed using bcrypt.
+3. User logs in with email and password.
+4. Server generates an access token and refresh token.
+5. Refresh token is hashed and stored in PostgreSQL.
+6. Access token is used to access protected APIs.
+7. When the access token expires, the refresh token generates new tokens.
+8. Refresh token rotation replaces the previously stored hash.
+9. On logout, the refresh token is removed and the user's token version is incremented.
+10. Old access tokens are rejected by the authentication strategy.
+
+## Role-Based Authorization
+
+Example of an admin-only endpoint:
+
+```typescript
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
+@Get('admin')
+adminDashboard() {
+  return {
+    message: 'Welcome Admin! You have access.',
+  };
+}
+```
+
+Expected authorization responses:
+
+| Scenario | Status |
+|---|---|
+| Valid ADMIN token | 200 OK |
+| Valid USER token | 403 Forbidden |
+| Missing token | 401 Unauthorized |
+| Invalid or revoked token | 401 Unauthorized |
+
+## Database Management
+
+Open Prisma Studio to view and manage database records:
+
+```bash
+pnpm exec prisma studio
+```
+
+Create a new migration after changing the Prisma schema:
+
+```bash
+pnpm exec prisma migrate dev --name migration_name
+```
+
+Generate Prisma Client:
+
+```bash
+pnpm exec prisma generate
+```
+
+## Running Tests
+
+Run unit tests:
+
+```bash
+pnpm test
+```
+
+Run end-to-end tests:
+
+```bash
+pnpm test:e2e
+```
+
+Run test coverage:
+
+```bash
+pnpm test:cov
+```
+
+## Project Structure
+
+```text
+src/
+├── auth/
+│   ├── decorators/
+│   │   └── roles.decorator.ts
+│   ├── guards/
+│   │   ├── jwt-auth.guard.ts
+│   │   └── roles.guard.ts
+│   ├── strategies/
+│   │   └── jwt.strategy.ts
+│   ├── dto/
+│   │   └── refresh-token.dto.ts
+│   ├── auth.controller.ts
+│   ├── auth.service.ts
+│   └── auth.module.ts
+│
+├── users/
+│   ├── dto/
+│   ├── users.controller.ts
+│   ├── users.service.ts
+│   └── users.module.ts
+│
+├── prisma/
+│   ├── prisma.module.ts
+│   └── prisma.service.ts
+│
+├── app.module.ts
+└── main.ts
+
+prisma/
+└── schema.prisma
+
+.env
+```
+
+*The structure above highlights the main project files; additional files may exist.*
+
+## Learning Goals
+
+This project is part of my hands-on learning journey with NestJS and backend development.
+
+Key concepts practiced:
+
+- NestJS modules, controllers, and services
+- REST API development
+- DTOs and validation
+- PostgreSQL database integration
+- Prisma ORM
+- Password hashing
+- JWT authentication
+- Refresh token rotation
+- Authentication guards
+- Role-based authorization
+- Database-backed token revocation
+
+## Future Improvements
+
+- Forgot password and reset password
+- Email verification
+- Login rate limiting
+- Automated API testing
+- Swagger API documentation
+- Production deployment
 
 ## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+This project is for learning and development purposes.
