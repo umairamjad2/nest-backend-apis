@@ -11,6 +11,8 @@ import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes, createHash } from 'crypto';
 import { NotFoundException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service.js';
 
 @Injectable()
 export class AuthService {
@@ -18,6 +20,7 @@ export class AuthService {
     private usersService: UsersService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private prisma: PrismaService,
   ) {}
 
 
@@ -133,6 +136,54 @@ export class AuthService {
       resetToken,
     };
   }
+
+
+  //reset-password
+  
+  async resetPassword(resetToken: string, newPassword: string) {
+    // Hash the token received from the user
+    const hashedToken = createHash('sha256')
+      .update(resetToken)
+      .digest('hex');
+
+    // Find the user with this token
+    const user = await this.prisma.user.findFirst({
+      where: {
+        resetPasswordToken: hashedToken,
+        resetPasswordExpires: {
+          gt: new Date(),
+        },
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException(
+        'Invalid or expired password reset token',
+      );
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password and invalidate existing sessions
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+        refreshToken: null,
+        tokenVersion: {
+          increment: 1,
+        },
+      },
+    });
+
+    return {
+      message: 'Password reset successfully',
+    };
+  }
+
 
   //login
   async login(dto: LoginUserDto) {
