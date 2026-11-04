@@ -9,6 +9,8 @@ import { UsersService } from '../users/users.service.js';
 import { LoginUserDto } from '../users/dto/login-user.dto.js';
 import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
+import { randomBytes, createHash } from 'crypto';
+import { NotFoundException } from '@nestjs/common';
 
 @Injectable()
 export class AuthService {
@@ -98,6 +100,38 @@ export class AuthService {
       user.role,
       user.tokenVersion,
     );
+  }
+  //forget password 
+  async forgotPassword(email: string) {
+    const user = await this.usersService.findByEmail(email);
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Generate a secure random token
+    const resetToken = randomBytes(32).toString('hex');
+
+    // Hash the token before storing it
+    const hashedToken = createHash('sha256')
+      .update(resetToken)
+      .digest('hex');
+
+    // Set expiration to 15 minutes
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    // Store hashed token in database
+    await this.usersService.savePasswordResetToken(
+      user.id,
+      hashedToken,
+      expiresAt,
+    );
+
+    // Temporary: return the token for local testing
+    return {
+      message: 'Password reset token generated successfully',
+      resetToken,
+    };
   }
 
   //login

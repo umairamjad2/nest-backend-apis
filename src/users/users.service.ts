@@ -37,7 +37,22 @@ export class UsersService {
       },
     });
   }
-  
+
+  //Forget Password
+  async savePasswordResetToken(
+    userId: number,
+    hashedToken: string,
+    expiresAt: Date,
+    ) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        resetPasswordToken: hashedToken,
+        resetPasswordExpires: expiresAt,
+      },
+    });
+  }
+  //login
   async login(dto: LoginUserDto) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -106,6 +121,8 @@ export class UsersService {
 
     return user;
   }
+
+  
 
   async create(dto: CreateUserDto) {
     
