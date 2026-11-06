@@ -26,10 +26,13 @@ export class UsersController {
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.usersService.findOne(id);
   }
-  @Post()
-    create(@Body() body: CreateUserDto) {
-    return this.usersService.create(body);
-  }
+
+  //because create user from auth -> user creation endpoint so nobody can bypass email verification.
+  //using registration in the Auth module.  
+  // @Post()
+  //   create(@Body() body: CreateUserDto) {
+  //   return this.usersService.create(body);
+  // }
 
   @Post('login')
   @HttpCode(200)
