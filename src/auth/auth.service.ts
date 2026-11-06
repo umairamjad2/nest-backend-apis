@@ -258,13 +258,13 @@ export class AuthService {
   }
 
   //send test email
-  async testEmail(email: string) {
-    await this.mailService.sendTestEmail(email);
+  // async testEmail(email: string) {
+  //   await this.mailService.sendTestEmail(email);
 
-    return {
-      message: 'Test email sent successfully',
-    };
-  }
+  //   return {
+  //     message: 'Test email sent successfully',
+  //   };
+  // }
   //login
   async login(dto: LoginUserDto) {
     // Find user by email

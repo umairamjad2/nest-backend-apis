@@ -42,10 +42,12 @@ export class AuthController {
   register(@Body() body: CreateUserDto) {
     return this.authService.register(body);
   }
-  @Post('test-email')
-  testEmail(@Body('email') email: string) {
-    return this.authService.testEmail(email);
-  }
+
+  //only for test
+  // @Post('test-email')
+  // testEmail(@Body('email') email: string) {
+  //   return this.authService.testEmail(email);
+  // }
 
   @Get('verify-email')
   verifyEmail(@Query('token') token: string) {
