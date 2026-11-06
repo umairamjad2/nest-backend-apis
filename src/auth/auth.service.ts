@@ -13,6 +13,8 @@ import { randomBytes, createHash } from 'crypto';
 import { NotFoundException } from '@nestjs/common';
 import { BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { MailService } from '../mail/mail.service.js';
+import { CreateUserDto } from '../users/dto/create-user.dto.js';
 
 @Injectable()
 export class AuthService {
@@ -21,6 +23,7 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private prisma: PrismaService,
+    private mailService: MailService,
   ) {}
 
 
@@ -130,13 +133,83 @@ export class AuthService {
       expiresAt,
     );
 
-    // Temporary: return the token for local testing
+   const resetLink =
+    `http://localhost:3001/reset-password?token=${resetToken}`;
+
+    await this.mailService.sendPasswordResetEmail(
+      user.email,
+      resetLink,
+    );
+
     return {
-      message: 'Password reset token generated successfully',
-      resetToken,
+      message: 'If the account exists, a password reset link has been sent.',
     };
   }
 
+  //email verified
+
+  async register(dto: CreateUserDto) {
+    // 1. Create the user
+    const user = await this.usersService.create(dto);
+
+    // 2. Generate a verification token
+    const verificationToken = randomBytes(32).toString('hex');
+
+    // 3. Hash the token before storing it
+    const hashedToken = createHash('sha256')
+      .update(verificationToken)
+      .digest('hex');
+
+    // 4. Set token expiry to 24 hours
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    // 5. Save the hashed token in the database
+    await this.usersService.saveEmailVerificationToken(
+      user.id,
+      hashedToken,
+      expiresAt,
+    );  
+
+    // 6. Create the verification link
+    const verificationLink =
+      `http://localhost:3000/auth/verify-email?token=${verificationToken}`;
+
+    // 7. Send verification email
+    await this.mailService.sendVerificationEmail(
+      user.email,
+      verificationLink,
+    );
+
+    return {
+      message: 'Registration successful. Please check your email to verify your account.',
+    };
+  }
+
+  //verify Email
+
+  async verifyEmail(token: string) {
+    // Hash the token received from the email link
+    const hashedToken = createHash('sha256')
+      .update(token)
+      .digest('hex');
+
+    // Find the user with a valid verification token
+    const user =
+      await this.usersService.findByEmailVerificationToken(hashedToken);
+
+    if (!user) {
+      throw new BadRequestException(
+        'Invalid or expired verification link',
+      );
+    }
+
+    // Mark the email as verified
+    await this.usersService.verifyEmail(user.id);
+
+    return {
+      message: 'Email verified successfully. You can now log in.',
+    };
+  }
 
   //reset-password
   
@@ -184,7 +257,14 @@ export class AuthService {
     };
   }
 
+  //send test email
+  async testEmail(email: string) {
+    await this.mailService.sendTestEmail(email);
 
+    return {
+      message: 'Test email sent successfully',
+    };
+  }
   //login
   async login(dto: LoginUserDto) {
     // Find user by email

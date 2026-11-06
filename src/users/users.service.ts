@@ -37,6 +37,50 @@ export class UsersService {
       },
     });
   }
+  //Save Email Verification
+  async saveEmailVerificationToken(
+    userId: number,
+    hashedToken: string,
+    expiresAt: Date,
+  ) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        emailVerificationToken: hashedToken,
+        emailVerificationExpires: expiresAt,
+      },
+    }); 
+  }
+
+  //Email Verification Token
+  async findByEmailVerificationToken(hashedToken: string) {
+    return this.prisma.user.findFirst({
+      where: {
+        emailVerificationToken: hashedToken,
+        emailVerificationExpires: {
+          gt: new Date(),
+        },
+      },
+    });
+  }
+
+  //Verify Email
+  async verifyEmail(userId: number) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        isEmailVerified: true,
+        emailVerificationToken: null,
+        emailVerificationExpires: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        isEmailVerified: true,
+      },
+    });
+  }
 
   //Forget Password
   async savePasswordResetToken(

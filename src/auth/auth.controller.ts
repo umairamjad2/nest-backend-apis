@@ -6,6 +6,7 @@ import {
   Get,
   UseGuards,
   Request,
+  Query,
 } from '@nestjs/common';
 import { Roles } from './decorators/roles.decorator.js';
 import { RolesGuard } from './guards/roles.guard.js';
@@ -15,6 +16,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import { ForgotPasswordDto } from './dto/forgot-password.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
+import { CreateUserDto } from '../users/dto/create-user.dto.js';
 
 @Controller('auth')
 export class AuthController {
@@ -34,6 +36,20 @@ export class AuthController {
       dto.resetToken,
       dto.newPassword,
     );
+  }
+
+  @Post('register')
+  register(@Body() body: CreateUserDto) {
+    return this.authService.register(body);
+  }
+  @Post('test-email')
+  testEmail(@Body('email') email: string) {
+    return this.authService.testEmail(email);
+  }
+
+  @Get('verify-email')
+  verifyEmail(@Query('token') token: string) {
+    return this.authService.verifyEmail(token);
   }
 
   @Post('login')
