@@ -8,7 +8,6 @@ import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import * as bcrypt from 'bcrypt';
-import { LoginUserDto } from './dto/login-user.dto.js';
 
 @Injectable()
 export class UsersService {
@@ -112,35 +111,6 @@ export class UsersService {
         resetPasswordExpires: expiresAt,
       },
     });
-  }
-  //login
-  async login(dto: LoginUserDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
-
-    if (!user) {
-      throw new NotFoundException('Invalid email or password');
-    }
-
-    const isPasswordValid = await bcrypt.compare(
-      dto.password,
-      user.password,
-    );
-
-    if (!isPasswordValid) {
-      throw new NotFoundException('Invalid email or password');
-    }
-
-    return {
-      message: 'Login successful',
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        createdAt: user.createdAt,
-      },
-    };
   }
 
   async findById(id: number) {

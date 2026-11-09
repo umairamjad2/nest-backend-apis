@@ -1,27 +1,47 @@
 import {
   Controller,
   Get,
-  Post,
   Patch,
   Delete,
   Body,
   Param,
   ParseIntPipe,
-  HttpCode,
+  UseGuards,
 } from '@nestjs/common';
 
 import { UsersService } from './users.service.js';
-import { CreateUserDto } from './dto/create-user.dto.js';
-import { LoginUserDto } from './dto/login-user.dto.js';
+import { UpdateUserDto } from './dto/update-user.dto.js';
+import {
+  ApiBearerAuth,
+  ApiForbiddenResponse,
+  ApiOperation,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { RolesGuard } from '../auth/guards/roles.guard.js';
+import { SelfOrAdminGuard } from '../auth/guards/self-or-admin.guard.js';
+import { Roles } from '../auth/decorators/roles.decorator.js';
+
+@ApiTags('users')
+@ApiBearerAuth()
+@ApiUnauthorizedResponse({ description: 'Missing, invalid or revoked access token' })
+@ApiForbiddenResponse({ description: 'Not allowed for this user' })
+@UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  @ApiOperation({ summary: 'List all users (admin only)' })
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
   @Get()
   findAll() {
     return this.usersService.findAll();
   }
 
+  @ApiOperation({ summary: 'Get a user by ID (own account or admin)' })
+  @UseGuards(SelfOrAdminGuard)
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.usersService.findOne(id);
@@ -34,20 +54,19 @@ export class UsersController {
   //   return this.usersService.create(body);
   // }
 
-  @Post('login')
-  @HttpCode(200)
-  login(@Body() body: LoginUserDto) {
-    return this.usersService.login(body);
-  }
-
+  @ApiOperation({ summary: 'Update a user (own account or admin)' })
+  @UseGuards(SelfOrAdminGuard)
   @Patch(':id')
   update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: Partial<CreateUserDto>,
+    @Body() body: UpdateUserDto,
   ) {
   return this.usersService.update(id, body);
   }
 
+  @ApiOperation({ summary: 'Delete a user (admin only)' })
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.usersService.remove(id);
