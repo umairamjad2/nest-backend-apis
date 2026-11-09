@@ -17,20 +17,37 @@ export class UsersService {
   //RefreshToken
   async updateRefreshToken(
     userId: number,
-    hashedRefreshToken: string| null,
-    ) {
+    hashedRefreshToken: string | null,
+    jti: string | null,
+  ) {
     return this.prisma.user.update({
       where: { id: userId },
       data: {
         refreshToken: hashedRefreshToken,
+        refreshTokenJti: jti,
       },
     });
+  }
+  // Replaces the token only if oldJti is still current, so one token can't be rotated twice
+  async rotateRefreshToken(
+    userId: number,
+    oldJti: string,
+    newHash: string,
+    newJti: string,
+  ) {
+    const { count } = await this.prisma.user.updateMany({
+      where: { id: userId, refreshTokenJti: oldJti },
+      data: { refreshToken: newHash, refreshTokenJti: newJti },
+    });
+
+    return count === 1;
   }
   async invalidateUserTokens(userId: number) {
     return this.prisma.user.update({
       where: { id: userId },
       data: {
         refreshToken: null,
+        refreshTokenJti: null,
         tokenVersion: {
           increment: 1,
         },

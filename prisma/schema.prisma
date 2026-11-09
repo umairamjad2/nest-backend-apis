@@ -22,7 +22,8 @@ model User {
   email     String   @unique
   password  String
   role      Role     @default(USER)
-  refreshToken String?
+  refreshToken    String?
+  refreshTokenJti String?
   isEmailVerified Boolean @default(false)
   emailVerificationToken   String?
   emailVerificationExpires DateTime?
