@@ -1,6 +1,6 @@
 # NestJS Backend – Authentication & User Management
 
-A backend learning project built with **NestJS, TypeScript, PostgreSQL, and Prisma ORM**. This project implements user management, secure authentication, JWT access and refresh tokens, and role-based authorization.
+A backend learning project built with **NestJS, TypeScript, PostgreSQL, and Prisma ORM**. This project implements user management, secure authentication, email verification, password reset, JWT access and refresh tokens, role-based authorization, rate limiting, and Swagger API documentation.
 
 ## Tech Stack
 
@@ -10,29 +10,35 @@ A backend learning project built with **NestJS, TypeScript, PostgreSQL, and Pris
 - **Prisma ORM** – Database management
 - **JWT** – Authentication
 - **Passport.js** – Authentication strategy
-- **Bcrypt** – Password and refresh token hashing
+- **Bcrypt** – Password hashing
+- **SHA-256 (Node.js crypto)** – Refresh, password reset, and email verification token hashing
 - **Class Validator** – Request validation
+- **Nodemailer** – Verification and password reset emails
+- **NestJS Throttler** – Rate limiting
+- **Swagger (OpenAPI)** – API documentation
+- **Vitest** – Testing
 - **pnpm** – Package manager
 
 ## Features
 
-### 1. User Management (CRUD)
+### 1. User Management
 
-- Create users
-- Get all users
-- Get a user by ID
-- Update user details
-- Delete users
-- Validate incoming request data
-- Store user information in PostgreSQL
+- List all users (admin only)
+- Get or update a user (own account or admin)
+- Delete users (admin only)
+- Users are created through `POST /auth/register`, so nobody can bypass email verification
+- `PATCH /users/:id` accepts only `name`; `role`, `email`, and `password` are rejected
 
 ### 2. Authentication
 
+- User registration with email verification
+- Login is blocked until the email is verified
 - User login with email and password
+- Forgot password and reset password by email
+- `forgot-password` gives the same response whether or not the email exists
 - Password hashing using bcrypt
 - JWT-based authentication
 - Protected API endpoints
-- Secure token verification
 
 ### 3. Access & Refresh Tokens
 
@@ -44,11 +50,15 @@ A backend learning project built with **NestJS, TypeScript, PostgreSQL, and Pris
 Implemented security features:
 
 - Separate access and refresh token secrets
-- Refresh token hashing and database storage
-- Refresh token verification
-- Refresh token rotation
-- Refresh token revocation on logout
+- Refresh tokens are hashed with SHA-256 before database storage
+- Every refresh token has a unique ID (`jti`), stored in `refreshTokenJti`
+- Refresh token rotation: every refresh returns a new token and the old one stops working
+- Atomic rotation, so one refresh token cannot be used twice by concurrent requests
+- Reuse detection: sending an old refresh token ends the user's session
+- Refresh token revocation on logout and password reset
 - Immediate access token invalidation using token versioning
+
+Each user has one active session, so logging in on a new device invalidates the previous device's refresh token.
 
 ### 4. Role-Based Access Control (RBAC)
 
@@ -61,10 +71,26 @@ Implemented using:
 - Custom `@Roles()` decorator
 - `RolesGuard`
 - `JwtAuthGuard`
+- `SelfOrAdminGuard` – allows admins or the user who owns the account
 
 ### 5. Request Validation
 
 Uses `class-validator`, `class-transformer`, and NestJS `ValidationPipe` to validate incoming requests and reject unexpected properties.
+
+### 6. Rate Limiting
+
+| Endpoint | Limit |
+|---|---|
+| `POST /auth/login` | 5 requests per minute |
+| `POST /auth/register` | 5 requests per minute |
+| `POST /auth/forgot-password` | 3 requests per minute |
+| All other endpoints | 10 requests per minute |
+
+Requests over the limit receive `429 Too Many Requests`.
+
+### 7. API Documentation
+
+Interactive Swagger documentation is available at `/api`, and the OpenAPI JSON at `/api-json`. Both are disabled when `NODE_ENV` is `production`.
 
 ## Project Setup
 
@@ -76,6 +102,7 @@ Make sure you have installed:
 - pnpm
 - PostgreSQL
 - Git
+- An SMTP email account (for verification and password reset emails)
 
 ### 1. Clone the repository
 
@@ -99,7 +126,16 @@ DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/nestjs_learning
 
 JWT_ACCESS_SECRET="YOUR_ACCESS_SECRET"
 JWT_REFRESH_SECRET="YOUR_REFRESH_SECRET"
+
+MAIL_HOST="YOUR_SMTP_HOST"
+MAIL_PORT="587"
+MAIL_USER="YOUR_SMTP_USERNAME"
+MAIL_PASSWORD="YOUR_SMTP_PASSWORD"
+
+NODE_ENV="development"
 ```
+
+Keep `NODE_ENV="development"` locally, or Swagger will return 404. Set `NODE_ENV=production` only on the live server. `PORT` is optional and defaults to `3000`.
 
 Generate secure JWT secrets using:
 
@@ -145,27 +181,46 @@ The application will run on:
 http://localhost:3000
 ```
 
+Swagger documentation:
+
+```text
+http://localhost:3000/api
+```
+
+To call protected routes in Swagger, log in with `POST /auth/login`, click **Authorize**, and paste the `access_token` without the word `Bearer`.
+
+### 6. Create an admin user
+
+New accounts always have the `USER` role. To create the first admin, register a user, then open Prisma Studio and change that user's `role` to `ADMIN`:
+
+```bash
+pnpm exec prisma studio
+```
+
 ## API Endpoints
 
 ### Authentication
 
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/auth/login` | Authenticate a user |
-| POST | `/auth/refresh` | Generate new tokens |
-| POST | `/auth/logout` | Log out and revoke tokens |
-| GET | `/auth/profile` | Get authenticated user profile |
-| GET | `/auth/admin` | Admin-only endpoint |
+| Method | Endpoint | Description | Access |
+|---|---|---|---|
+| POST | `/auth/register` | Create an account and send a verification email | Public |
+| GET | `/auth/verify-email?token=` | Verify an email address | Public |
+| POST | `/auth/login` | Authenticate a user | Public |
+| POST | `/auth/refresh` | Generate new tokens | Public, needs refresh token |
+| POST | `/auth/forgot-password` | Email a password reset link | Public |
+| POST | `/auth/reset-password` | Set a new password using a reset token | Public |
+| POST | `/auth/logout` | Log out and revoke tokens | Logged in |
+| GET | `/auth/profile` | Get authenticated user profile | Logged in |
+| GET | `/auth/admin` | Admin-only endpoint | Admin |
 
 ### User Management
 
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/users` | Create a user |
-| GET | `/users` | Get all users |
-| GET | `/users/:id` | Get user by ID |
-| PATCH | `/users/:id` | Update user |
-| DELETE | `/users/:id` | Delete user |
+| Method | Endpoint | Description | Access |
+|---|---|---|---|
+| GET | `/users` | Get all users | Admin |
+| GET | `/users/:id` | Get user by ID | Own account or admin |
+| PATCH | `/users/:id` | Update the user's name | Own account or admin |
+| DELETE | `/users/:id` | Delete user | Admin |
 
 Protected endpoints require an access token in the Authorization header:
 
@@ -189,18 +244,26 @@ Endpoint:
 POST /auth/refresh
 ```
 
+The response contains a new `access_token` and a new `refresh_token`. Always use the newest refresh token: sending an old one returns `401 Refresh token already used` and ends the session, so the user must log in again.
+
+Frontends should allow only one refresh request at a time, otherwise parallel requests can reuse an old token.
+
 ## Authentication Flow
 
 1. User registers with their details.
-2. Password is hashed using bcrypt.
-3. User logs in with email and password.
-4. Server generates an access token and refresh token.
-5. Refresh token is hashed and stored in PostgreSQL.
-6. Access token is used to access protected APIs.
-7. When the access token expires, the refresh token generates new tokens.
-8. Refresh token rotation replaces the previously stored hash.
-9. On logout, the refresh token is removed and the user's token version is incremented.
-10. Old access tokens are rejected by the authentication strategy.
+2. Password is hashed using bcrypt and a verification email is sent. The link is valid for 24 hours.
+3. User verifies their email.
+4. User logs in with email and password.
+5. Server generates an access token and refresh token.
+6. A SHA-256 hash of the refresh token and its `jti` are stored in PostgreSQL.
+7. Access token is used to access protected APIs.
+8. When the access token expires, the refresh token generates new tokens.
+9. Refresh token rotation replaces the stored hash and `jti`, so the old refresh token stops working.
+10. If an old refresh token is reused, the session is ended and the user's token version is incremented.
+11. On logout, the refresh token is removed and the user's token version is incremented.
+12. Old access tokens are rejected by the authentication strategy.
+
+Password reset links are valid for 15 minutes. A successful reset also ends all of the user's sessions.
 
 ## Role-Based Authorization
 
@@ -225,6 +288,8 @@ Expected authorization responses:
 | Valid USER token | 403 Forbidden |
 | Missing token | 401 Unauthorized |
 | Invalid or revoked token | 401 Unauthorized |
+
+Routes marked **Own account or admin** also return `403 Forbidden` when a normal user requests another user's account.
 
 ## Database Management
 
@@ -266,6 +331,8 @@ Run test coverage:
 pnpm test:cov
 ```
 
+The default `should be defined` specs in `src/auth` and `src/users` currently fail because they do not provide their dependencies. Automated auth tests still need to be added.
+
 ## Project Structure
 
 ```text
@@ -275,11 +342,14 @@ src/
 │   │   └── roles.decorator.ts
 │   ├── guards/
 │   │   ├── jwt-auth.guard.ts
-│   │   └── roles.guard.ts
+│   │   ├── roles.guard.ts
+│   │   └── self-or-admin.guard.ts
 │   ├── strategies/
 │   │   └── jwt.strategy.ts
 │   ├── dto/
-│   │   └── refresh-token.dto.ts
+│   │   ├── forgot-password.dto.ts
+│   │   ├── refresh-token.dto.ts
+│   │   └── reset-password.dto.ts
 │   ├── auth.controller.ts
 │   ├── auth.service.ts
 │   └── auth.module.ts
@@ -289,6 +359,8 @@ src/
 │   ├── users.controller.ts
 │   ├── users.service.ts
 │   └── users.module.ts
+│
+├── mail/
 │
 ├── prisma/
 │   ├── prisma.module.ts
@@ -322,14 +394,18 @@ Key concepts practiced:
 - Authentication guards
 - Role-based authorization
 - Database-backed token revocation
+- Email verification and password reset
+- Rate limiting
+- Swagger API documentation
 
 ## Future Improvements
 
-- Forgot password and reset password
-- Email verification
-- Login rate limiting
-- Automated API testing
-- Swagger API documentation
+- CORS configuration for a browser frontend
+- Refresh token in an `httpOnly` cookie
+- Configurable frontend URL for email links
+- Multi-device sessions with a `RefreshToken` table
+- Change password and change email flows
+- Automated auth testing
 - Production deployment
 
 ## License
