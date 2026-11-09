@@ -27,45 +27,69 @@ export class AuthService {
   ) {}
 
 
-  //generate token
+  // SHA-256, not bcrypt: bcrypt only reads the first 72 bytes, which are the same for a user's JWTs
+  private hashRefreshToken(refreshToken: string) {
+    return createHash('sha256').update(refreshToken).digest('hex');
+  }
+
+  // Signs a token pair without saving anything
+  private async signTokens(
+    userId: number,
+    email: string,
+    role: string,
+    tokenVersion: number,
+  ) {
+    const payload = {
+      sub: userId,
+      email,
+      role,
+      tokenVersion,
+    };
+
+    // Access token payload
+    const accessPayload = payload;
+
+    // Give every refresh token a unique ID
+    const refreshTokenId = randomBytes(16).toString('hex');
+
+    const refreshPayload = {
+      ...payload,
+      jti: refreshTokenId,
+  };
+
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwtService.signAsync(accessPayload, {
+        secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
+        expiresIn: '15m',
+      }),
+
+      this.jwtService.signAsync(refreshPayload, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: '7d',
+      }),
+    ]);
+
+    return {
+      accessToken,
+      refreshToken,
+      jti: refreshTokenId,
+      hash: this.hashRefreshToken(refreshToken),
+    };
+  }
+
   async generateTokens(
     userId: number,
     email: string,
     role: string,
     tokenVersion: number,
-  ) 
-  {
-  const payload = {
-    sub: userId,
-    email,
-    role,
-    tokenVersion,
-  };
+  ) {
+    const tokens = await this.signTokens(userId, email, role, tokenVersion);
 
-  const [accessToken, refreshToken] = await Promise.all([
-    this.jwtService.signAsync(payload, {
-      secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
-      expiresIn: '15m',
-    }),
-
-    this.jwtService.signAsync(payload, {
-      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-      expiresIn: '7d',
-    }),
-  ]);
-
-  // Hash refresh token
-  const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
-
-  // Store hashed token in database
-  await this.usersService.updateRefreshToken(
-    userId,
-    hashedRefreshToken,
-  );
+    await this.usersService.updateRefreshToken(userId, tokens.hash, tokens.jti);
 
     return {
-      access_token: accessToken,
-      refresh_token: refreshToken,
+      access_token: tokens.accessToken,
+      refresh_token: tokens.refreshToken,
     };
   }
 
@@ -75,11 +99,12 @@ export class AuthService {
       sub: number;
       email: string;
       role: string;
+      jti: string;
     };
 
     try {
       payload = await this.jwtService.verifyAsync(refreshToken, {
-      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       });
     } catch {
       throw new UnauthorizedException('Invalid or expired refresh token');
@@ -87,25 +112,45 @@ export class AuthService {
 
     const user = await this.usersService.findById(payload.sub);
 
-    if (!user || !user.refreshToken) {
+    if (!user || !user.refreshToken || !user.refreshTokenJti) {
       throw new UnauthorizedException('Access denied');
     }
 
-    const isRefreshTokenValid = await bcrypt.compare(
-      refreshToken,
-      user.refreshToken,
-    );
+    // First: fast jti check — catches reuse immediately without bcrypt
+    if (user.refreshTokenJti !== payload.jti) {
+      // Token reuse detected — revoke refresh and access tokens (possible theft)
+      await this.usersService.invalidateUserTokens(user.id);
+      throw new UnauthorizedException('Refresh token already used');
+    }
 
-    if (!isRefreshTokenValid) {
+    // Second: compare against the stored hash
+    if (this.hashRefreshToken(refreshToken) !== user.refreshToken) {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    return this.generateTokens(
+    const next = await this.signTokens(
       user.id,
       user.email,
       user.role,
       user.tokenVersion,
     );
+
+    const rotated = await this.usersService.rotateRefreshToken(
+      user.id,
+      payload.jti,
+      next.hash,
+      next.jti,
+    );
+
+    // Lost a race with a concurrent refresh — usually a double-click, so keep the session
+    if (!rotated) {
+      throw new UnauthorizedException('Refresh token already used');
+    }
+
+    return {
+      access_token: next.accessToken,
+      refresh_token: next.refreshToken,
+    };
   }
   //forget password 
   async forgotPassword(email: string) {
@@ -246,6 +291,7 @@ export class AuthService {
         resetPasswordToken: null,
         resetPasswordExpires: null,
         refreshToken: null,
+        refreshTokenJti: null,   // also clear jti so no stale token ID remains
         tokenVersion: {
           increment: 1,
         },
