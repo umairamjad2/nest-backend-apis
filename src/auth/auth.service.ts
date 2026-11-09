@@ -10,7 +10,6 @@ import { LoginUserDto } from '../users/dto/login-user.dto.js';
 import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes, createHash } from 'crypto';
-import { NotFoundException } from '@nestjs/common';
 import { BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { MailService } from '../mail/mail.service.js';
@@ -154,10 +153,15 @@ export class AuthService {
   }
   //forget password 
   async forgotPassword(email: string) {
+    const genericResponse = {
+      message: 'If the account exists, a password reset link has been sent.',
+    };
+
     const user = await this.usersService.findByEmail(email);
 
+    // Same response either way, so this route can't reveal which emails are registered
     if (!user) {
-      throw new NotFoundException('User not found');
+      return genericResponse;
     }
 
     // Generate a secure random token
@@ -186,9 +190,7 @@ export class AuthService {
       resetLink,
     );
 
-    return {
-      message: 'If the account exists, a password reset link has been sent.',
-    };
+    return genericResponse;
   }
 
   //email verified
