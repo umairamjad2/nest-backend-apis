@@ -6,36 +6,88 @@ import {
   Get,
   UseGuards,
   Request,
+  Req,
+  Res,
   Query,
   HttpCode,
+  UnauthorizedException,
 } from '@nestjs/common';
+import type {
+  CookieOptions,
+  Request as ExpressRequest,
+  Response as ExpressResponse,
+} from 'express';
 import { Roles } from './decorators/roles.decorator.js';
 import { RolesGuard } from './guards/roles.guard.js';
 import { AuthService } from './auth.service.js';
 import { LoginUserDto } from '../users/dto/login-user.dto.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
-import { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import { ForgotPasswordDto } from './dto/forgot-password.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { CreateUserDto } from '../users/dto/create-user.dto.js';
 import { Throttle } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
+  ApiCookieAuth,
   ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+
+const REFRESH_COOKIE = 'refresh_token';
+
+// httpOnly: JavaScript can't read it. path: only sent to /auth routes.
+const refreshCookieOptions: CookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+  path: '/auth',
+};
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-  @ApiOperation({ summary: 'Exchange a refresh token for a new token pair' })
-  @ApiUnauthorizedResponse({ description: 'Invalid, expired or already used refresh token' })
+  private setRefreshCookie(res: ExpressResponse, refreshToken: string) {
+    res.cookie(REFRESH_COOKIE, refreshToken, {
+      ...refreshCookieOptions,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // same as the refresh token's 7d expiry
+    });
+  }
+
+  private clearRefreshCookie(res: ExpressResponse) {
+    res.clearCookie(REFRESH_COOKIE, refreshCookieOptions);
+  }
+
+  @ApiOperation({ summary: 'Exchange the refresh_token cookie for a new access token' })
+  @ApiCookieAuth(REFRESH_COOKIE)
+  @ApiUnauthorizedResponse({ description: 'Missing, invalid, expired or already used refresh token' })
   @Post('refresh')
-  refreshTokens(@Body() dto: RefreshTokenDto) {
-    return this.authService.refreshTokens(dto.refreshToken);
+  async refreshTokens(
+    @Req() req: ExpressRequest,
+    @Res({ passthrough: true }) res: ExpressResponse,
+  ) {
+    const refreshToken: string | undefined = req.cookies?.[REFRESH_COOKIE];
+
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token missing');
+    }
+
+    try {
+      const tokens = await this.authService.refreshTokens(refreshToken);
+      this.setRefreshCookie(res, tokens.refresh_token);
+      return { access_token: tokens.access_token };
+    } catch (error) {
+      // Only drop the cookie if it can never work again. A lost race keeps the session.
+      if (
+        error instanceof UnauthorizedException &&
+        error.message !== 'Refresh token already used'
+      ) {
+        this.clearRefreshCookie(res);
+      }
+      throw error;
+    }
   }
 
   @Throttle({ default: { limit: 3, ttl: 60000 } })
@@ -72,19 +124,28 @@ export class AuthController {
     return this.authService.verifyEmail(token);
   }
   @Throttle({ default: { limit: 5, ttl: 60000 } })
-  @ApiOperation({ summary: 'Log in and receive access and refresh tokens' })
+  @ApiOperation({ summary: 'Log in: returns an access token and sets the refresh_token cookie' })
   @ApiUnauthorizedResponse({ description: 'Wrong email or password, or email not verified' })
   @Post('login')
   @HttpCode(200)
-  login(@Body() dto: LoginUserDto) {
-    return this.authService.login(dto);
+  async login(
+    @Body() dto: LoginUserDto,
+    @Res({ passthrough: true }) res: ExpressResponse,
+  ) {
+    const { refresh_token, ...body } = await this.authService.login(dto);
+    this.setRefreshCookie(res, refresh_token);
+    return body;
   }
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Log out and revoke all tokens' })
+  @ApiOperation({ summary: 'Log out, revoke all tokens and clear the refresh_token cookie' })
   @ApiUnauthorizedResponse({ description: 'Missing, invalid or revoked access token' })
   @Post('logout')
-  logout(@Request() req: any) {
+  logout(
+    @Request() req: any,
+    @Res({ passthrough: true }) res: ExpressResponse,
+  ) {
+    this.clearRefreshCookie(res);
     return this.authService.logout(req.user.userId);
   }
 
