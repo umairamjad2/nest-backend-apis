@@ -50,6 +50,7 @@ A backend learning project built with **NestJS, TypeScript, PostgreSQL, and Pris
 Implemented security features:
 
 - Separate access and refresh token secrets
+- Refresh token is sent in an `httpOnly` cookie (`refresh_token`, path `/auth`), so frontend JavaScript cannot read it
 - Refresh tokens are hashed with SHA-256 before database storage
 - Every refresh token has a unique ID (`jti`), stored in `refreshTokenJti`
 - Refresh token rotation: every refresh returns a new token and the old one stops working
@@ -77,7 +78,11 @@ Implemented using:
 
 Uses `class-validator`, `class-transformer`, and NestJS `ValidationPipe` to validate incoming requests and reject unexpected properties.
 
-### 6. Rate Limiting
+### 6. CORS
+
+Only the frontend at `FRONTEND_URL` (default `http://localhost:3001`) may call the API from a browser, with cookies allowed.
+
+### 7. Rate Limiting
 
 | Endpoint | Limit |
 |---|---|
@@ -88,7 +93,7 @@ Uses `class-validator`, `class-transformer`, and NestJS `ValidationPipe` to vali
 
 Requests over the limit receive `429 Too Many Requests`.
 
-### 7. API Documentation
+### 8. API Documentation
 
 Interactive Swagger documentation is available at `/api`, and the OpenAPI JSON at `/api-json`. Both are disabled when `NODE_ENV` is `production`.
 
@@ -132,10 +137,14 @@ MAIL_PORT="587"
 MAIL_USER="YOUR_SMTP_USERNAME"
 MAIL_PASSWORD="YOUR_SMTP_PASSWORD"
 
+FRONTEND_URL="http://localhost:3001"
+
 NODE_ENV="development"
 ```
 
-Keep `NODE_ENV="development"` locally, or Swagger will return 404. Set `NODE_ENV=production` only on the live server. `PORT` is optional and defaults to `3000`.
+Keep `NODE_ENV="development"` locally, or Swagger will return 404. Set `NODE_ENV=production` only on the live server; it also marks the refresh cookie `Secure`, so production must use HTTPS. `PORT` is optional and defaults to `3000`.
+
+`FRONTEND_URL` is the only origin allowed by CORS and is used in password reset links. It has no trailing slash.
 
 Generate secure JWT secrets using:
 
@@ -187,7 +196,7 @@ Swagger documentation:
 http://localhost:3000/api
 ```
 
-To call protected routes in Swagger, log in with `POST /auth/login`, click **Authorize**, and paste the `access_token` without the word `Bearer`.
+To call protected routes in Swagger, log in with `POST /auth/login`, click **Authorize**, and paste the `access_token` without the word `Bearer`. Login also sets the refresh cookie in your browser, so `POST /auth/refresh` works in Swagger with no input.
 
 ### 6. Create an admin user
 
@@ -205,11 +214,11 @@ pnpm exec prisma studio
 |---|---|---|---|
 | POST | `/auth/register` | Create an account and send a verification email | Public |
 | GET | `/auth/verify-email?token=` | Verify an email address | Public |
-| POST | `/auth/login` | Authenticate a user | Public |
-| POST | `/auth/refresh` | Generate new tokens | Public, needs refresh token |
+| POST | `/auth/login` | Return an access token and set the refresh cookie | Public |
+| POST | `/auth/refresh` | Return a new access token and set a new refresh cookie | Public, needs refresh cookie |
 | POST | `/auth/forgot-password` | Email a password reset link | Public |
 | POST | `/auth/reset-password` | Set a new password using a reset token | Public |
-| POST | `/auth/logout` | Log out and revoke tokens | Logged in |
+| POST | `/auth/logout` | Log out, revoke tokens and clear the refresh cookie | Logged in |
 | GET | `/auth/profile` | Get authenticated user profile | Logged in |
 | GET | `/auth/admin` | Admin-only endpoint | Admin |
 
@@ -228,25 +237,21 @@ Protected endpoints require an access token in the Authorization header:
 Authorization: Bearer YOUR_ACCESS_TOKEN
 ```
 
-### Refresh Token Request
+### Refresh Token Cookie
 
-Send the refresh token in the request body:
-
-```json
-{
-  "refreshToken": "YOUR_REFRESH_TOKEN"
-}
-```
-
-Endpoint:
+The refresh token never appears in a response body. Login and refresh set it as a cookie:
 
 ```http
-POST /auth/refresh
+Set-Cookie: refresh_token=...; Max-Age=604800; Path=/auth; HttpOnly; SameSite=Lax
 ```
 
-The response contains a new `access_token` and a new `refresh_token`. Always use the newest refresh token: sending an old one returns `401 Refresh token already used` and ends the session, so the user must log in again.
+`POST /auth/refresh` takes no body. It reads the cookie, returns `{ "access_token": "..." }`, and replaces the cookie with a new one. Reusing an old refresh token returns `401 Refresh token already used` and ends the session, so the user must log in again.
 
-Frontends should allow only one refresh request at a time, otherwise parallel requests can reuse an old token.
+### Frontend Requirements
+
+- Send `credentials: 'include'` (fetch) or `withCredentials: true` (axios) on login, refresh and logout, or the browser will not store or send the cookie.
+- Keep the access token in memory, not `localStorage`. After a page reload, call `POST /auth/refresh` to get a new one.
+- On a `401`, call `/auth/refresh` once and retry the request. Allow only one refresh request at a time; parallel requests share its result.
 
 ## Authentication Flow
 
@@ -254,13 +259,13 @@ Frontends should allow only one refresh request at a time, otherwise parallel re
 2. Password is hashed using bcrypt and a verification email is sent. The link is valid for 24 hours.
 3. User verifies their email.
 4. User logs in with email and password.
-5. Server generates an access token and refresh token.
+5. Server returns an access token and sets the refresh token as an `httpOnly` cookie.
 6. A SHA-256 hash of the refresh token and its `jti` are stored in PostgreSQL.
 7. Access token is used to access protected APIs.
 8. When the access token expires, the refresh token generates new tokens.
 9. Refresh token rotation replaces the stored hash and `jti`, so the old refresh token stops working.
 10. If an old refresh token is reused, the session is ended and the user's token version is incremented.
-11. On logout, the refresh token is removed and the user's token version is incremented.
+11. On logout, the refresh token is removed, the cookie is cleared, and the user's token version is incremented.
 12. Old access tokens are rejected by the authentication strategy.
 
 Password reset links are valid for 15 minutes. A successful reset also ends all of the user's sessions.
@@ -331,7 +336,7 @@ Run test coverage:
 pnpm test:cov
 ```
 
-The default `should be defined` specs in `src/auth` and `src/users` currently fail because they do not provide their dependencies. Automated auth tests still need to be added.
+The default `should be defined` specs in `src/auth`, `src/users`, and `src/mail` currently fail because they do not provide their dependencies. Automated auth tests still need to be added.
 
 ## Project Structure
 
@@ -348,7 +353,6 @@ src/
 │   │   └── jwt.strategy.ts
 │   ├── dto/
 │   │   ├── forgot-password.dto.ts
-│   │   ├── refresh-token.dto.ts
 │   │   └── reset-password.dto.ts
 │   ├── auth.controller.ts
 │   ├── auth.service.ts
@@ -400,9 +404,7 @@ Key concepts practiced:
 
 ## Future Improvements
 
-- CORS configuration for a browser frontend
-- Refresh token in an `httpOnly` cookie
-- Configurable frontend URL for email links
+- Configurable backend URL for email verification links
 - Multi-device sessions with a `RefreshToken` table
 - Change password and change email flows
 - Automated auth testing
