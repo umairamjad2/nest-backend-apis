@@ -9,12 +9,13 @@ import { AuthModule } from './auth/auth.module.js';
 import { MailModule } from './mail/mail.module.js';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { validateEnv } from './config/env.validation.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ThrottlerModule.forRoot([
       {
         ttl: 60000,
@@ -24,11 +25,16 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     // Distributed tracing, auto-correlated logs, request/job metrics, error
     // telemetry, alarms, and more — out of the box. Sign up at https://observe.nestjs.com,
     // then run `npx @nestjs/observe link` to write your key pair into .env.
-    ObserveModule.forRoot({
-      appKey: process.env.OBSERVE_APP_KEY ?? 'YOUR_APP_KEY',
-      appSecret: process.env.OBSERVE_APP_SECRET ?? 'YOUR_APP_SECRET',
-      serviceId: 'nestjs-learning',
-    }),
+    // Only enabled once the keys are set, so it never runs with placeholder credentials
+    ...(process.env.OBSERVE_APP_KEY && process.env.OBSERVE_APP_SECRET
+      ? [
+          ObserveModule.forRoot({
+            appKey: process.env.OBSERVE_APP_KEY,
+            appSecret: process.env.OBSERVE_APP_SECRET,
+            serviceId: 'nestjs-learning',
+          }),
+        ]
+      : []),
     UsersModule,
      PrismaModule,
      AuthModule,

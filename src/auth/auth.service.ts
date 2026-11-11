@@ -115,7 +115,7 @@ export class AuthService {
       throw new UnauthorizedException('Access denied');
     }
 
-    // First: fast jti check — catches reuse immediately without bcrypt
+    // First: fast jti check — catches reuse immediately without bcrypt 
     if (user.refreshTokenJti !== payload.jti) {
       // Token reuse detected — revoke refresh and access tokens (possible theft)
       await this.usersService.invalidateUserTokens(user.id);
@@ -219,8 +219,10 @@ export class AuthService {
     );  
 
     // 6. Create the verification link
-    const verificationLink =
-      `http://localhost:3000/auth/verify-email?token=${verificationToken}`;
+    const appUrl = (
+      this.configService.get<string>('APP_URL') ?? 'http://localhost:3000'
+    ).replace(/\/+$/, '');
+    const verificationLink = `${appUrl}/auth/verify-email?token=${verificationToken}`;
 
     // 7. Send verification email
     await this.mailService.sendVerificationEmail(
