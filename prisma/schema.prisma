@@ -30,4 +30,34 @@ model User {
   resetPasswordToken   String?
   resetPasswordExpires DateTime?
   createdAt DateTime @default(now())
+  tasks     Task[]
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+// Declared low to high, so sorting by priority descending puts HIGH first
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Task {
+  id          Int          @id @default(autoincrement())
+  title       String
+  description String?
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  dueDate     DateTime?
+  // Deleting a user deletes their tasks too
+  userId      Int
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([userId, status])
 }
