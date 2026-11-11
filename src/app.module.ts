@@ -10,6 +10,7 @@ import { MailModule } from './mail/mail.module.js';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { validateEnv } from './config/env.validation.js';
+import { TasksModule } from './tasks/tasks.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -39,6 +40,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
      PrismaModule,
      AuthModule,
      MailModule,
+     TasksModule,
   ],
   controllers: [AppController],
   providers: [AppService ,
