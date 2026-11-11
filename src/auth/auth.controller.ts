@@ -96,6 +96,7 @@ export class AuthController {
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto.email);
   }
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiOperation({ summary: 'Set a new password using a reset token' })
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
@@ -118,6 +119,7 @@ export class AuthController {
   //   return this.authService.testEmail(email);
   // }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @ApiOperation({ summary: 'Verify an email address using the emailed token' })
   @Get('verify-email')
   verifyEmail(@Query('token') token: string) {
