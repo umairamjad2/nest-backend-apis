@@ -10,7 +10,7 @@ const REQUIRED = [
 ] as const;
 
 // Only required in production, where the localhost fallbacks would be wrong
-const REQUIRED_IN_PRODUCTION = ['APP_URL', 'FRONTEND_URL'] as const;
+const REQUIRED_IN_PRODUCTION = ['FRONTEND_URL'] as const;
 
 export function validateEnv(config: Record<string, unknown>) {
   const isProduction = config.NODE_ENV === 'production';

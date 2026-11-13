@@ -218,11 +218,12 @@ export class AuthService {
       expiresAt,
     );  
 
-    // 6. Create the verification link
-    const appUrl = (
-      this.configService.get<string>('APP_URL') ?? 'http://localhost:3000'
+    // 6. Create the verification link. It opens the frontend's /verify-email page,
+    // which calls GET /auth/verify-email and shows the result.
+    const frontendUrl = (
+      this.configService.get<string>('FRONTEND_URL') ?? 'http://localhost:3001'
     ).replace(/\/+$/, '');
-    const verificationLink = `${appUrl}/auth/verify-email?token=${verificationToken}`;
+    const verificationLink = `${frontendUrl}/verify-email?token=${verificationToken}`;
 
     // 7. Send verification email
     await this.mailService.sendVerificationEmail(
