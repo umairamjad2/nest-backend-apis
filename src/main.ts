@@ -58,4 +58,10 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT ?? 3000);
 }
-await bootstrap();
+
+// Not a top-level await: Vercel waits for this file to finish loading before it
+// sends requests to the server, so awaiting listen() here hangs every request.
+bootstrap().catch((error: unknown) => {
+  console.error(error);
+  process.exit(1);
+});
