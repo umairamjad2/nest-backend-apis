@@ -25,7 +25,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { ForgotPasswordDto } from './dto/forgot-password.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { CreateUserDto } from '../users/dto/create-user.dto.js';
-import { Throttle } from '@nestjs/throttler';
+import { Throttle } from '../common/throttle/throttle.js';
 import {
   ApiBearerAuth,
   ApiCookieAuth,

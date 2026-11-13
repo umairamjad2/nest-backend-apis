@@ -10,7 +10,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
+import { Throttle } from '../common/throttle/throttle.js';
 import {
   ApiBearerAuth,
   ApiNotFoundResponse,
