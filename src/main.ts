@@ -3,7 +3,14 @@ import { AppModule, ObserveInstrument } from './app.module.js';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
-import helmet from 'helmet';
+import helmetImport, { type HelmetOptions } from 'helmet';
+import type { RequestHandler } from 'express';
+
+// Vercel's compiler reads helmet's CommonJS types, where the default import is the whole
+// module object rather than the function. At runtime both point to the same function.
+type Helmet = (options?: Readonly<HelmetOptions>) => RequestHandler;
+const helmetModule = helmetImport as unknown as Helmet | { default: Helmet };
+const helmet = typeof helmetModule === 'function' ? helmetModule : helmetModule.default;
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
