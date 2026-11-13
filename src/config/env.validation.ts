@@ -26,6 +26,11 @@ export function validateEnv(config: Record<string, unknown>) {
     errors.push('MAIL_PORT must be a number');
   }
 
+  const cookiePath = config.REFRESH_COOKIE_PATH;
+  if (cookiePath !== undefined && (typeof cookiePath !== 'string' || !cookiePath.startsWith('/'))) {
+    errors.push('REFRESH_COOKIE_PATH must start with "/" (for example /api/auth)');
+  }
+
   if (isProduction) {
     for (const key of ['JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET']) {
       const value = config[key];

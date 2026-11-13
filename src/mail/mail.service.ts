@@ -1,11 +1,12 @@
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class MailService {
   private transporter: nodemailer.Transporter;
+  private readonly logger = new Logger(MailService.name);
 
     constructor(private configService: ConfigService) {
         this.transporter = nodemailer.createTransport({
@@ -19,19 +20,34 @@ export class MailService {
         });
     }
 
+    // Sends one email and logs the SMTP server's answer, so delivery problems show up in the terminal
+    private async send(options: { to: string; subject: string; text?: string; html?: string }) {
+        try {
+            const info = await this.transporter.sendMail({
+                from: this.configService.get<string>('MAIL_USER'),
+                ...options,
+            });
+            this.logger.log(`"${options.subject}" sent to ${options.to}: ${info.response}`);
+            return info;
+        } catch (error) {
+            this.logger.error(
+                `"${options.subject}" to ${options.to} failed: ${error instanceof Error ? error.message : error}`,
+            );
+            throw error;
+        }
+    }
+
     async sendTestEmail(email: string) {
-        return this.transporter.sendMail({
-        from: this.configService.get<string>('MAIL_USER'),
+        return this.send({
         to: email,
         subject: 'NestJS Email Test',
         text: 'Congratulations! Your NestJS email service is working.',
         });
     }
 
-  
+
     async sendPasswordResetEmail(email: string, resetLink: string) {
-        return this.transporter.sendMail({
-            from: this.configService.get<string>('MAIL_USER'),
+        return this.send({
             to: email,
             subject: 'Reset Your Password',
             html: `
@@ -44,10 +60,9 @@ export class MailService {
             `,
             });
     }
-    
+
     async sendVerificationEmail(email: string, verificationLink: string) {
-        return this.transporter.sendMail({
-        from: this.configService.get<string>('MAIL_USER'),
+        return this.send({
         to: email,
         subject: 'Verify Your Email Address',
         html: `

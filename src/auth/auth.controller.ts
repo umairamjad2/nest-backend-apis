@@ -36,12 +36,13 @@ import {
 
 const REFRESH_COOKIE = 'refresh_token';
 
-// httpOnly: JavaScript can't read it. path: only sent to /auth routes.
+// httpOnly: JavaScript can't read it. path: only sent to the auth routes.
+// Behind the frontend's /api proxy the browser sees /api/auth, so the path is configurable.
 const refreshCookieOptions: CookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax',
-  path: '/auth',
+  path: process.env.REFRESH_COOKIE_PATH ?? '/auth',
 };
 
 @ApiTags('auth')
