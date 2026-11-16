@@ -1,8 +1,10 @@
 
 import {
   Injectable,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { DEMO_EMAIL_DOMAIN, DEMO_TTL_MS, MAX_ACTIVE_DEMOS, demoTasks, isDemoEmail } from './demo.js';
 
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service.js';
@@ -159,8 +161,9 @@ export class AuthService {
 
     const user = await this.usersService.findByEmail(email);
 
-    // Same response either way, so this route can't reveal which emails are registered
-    if (!user) {
+    // Same response either way, so this route can't reveal which emails are registered.
+    // Demo addresses can't receive mail, so don't try.
+    if (!user || isDemoEmail(user.email)) {
       return genericResponse;
     }
 
@@ -352,6 +355,43 @@ export class AuthService {
       message: 'Login successful',
       ...tokens,
       };
+  }
+
+  /** Create a throwaway demo account with sample tasks and log it in. See demo.ts. */
+  async startDemo() {
+    const demoUsers = { email: { endsWith: `@${DEMO_EMAIL_DOMAIN}` } };
+
+    // Clean up expired demos first (their tasks are deleted by the cascade)
+    await this.prisma.user.deleteMany({
+      where: { ...demoUsers, createdAt: { lt: new Date(Date.now() - DEMO_TTL_MS) } },
+    });
+
+    const active = await this.prisma.user.count({ where: demoUsers });
+    if (active >= MAX_ACTIVE_DEMOS) {
+      throw new ServiceUnavailableException(
+        'The demo is busy right now. Please try again later or create an account.',
+      );
+    }
+
+    // Nobody knows this password, so the account can only be used through this session.
+    const password = await bcrypt.hash(randomBytes(32).toString('hex'), 10);
+
+    const user = await this.prisma.user.create({
+      data: {
+        name: 'Demo User',
+        email: `demo-${randomBytes(6).toString('hex')}@${DEMO_EMAIL_DOMAIN}`,
+        password,
+        isEmailVerified: true,
+        tasks: { create: demoTasks() },
+      },
+    });
+
+    const tokens = await this.generateTokens(user.id, user.email, user.role, user.tokenVersion);
+
+    return {
+      message: 'Demo started',
+      ...tokens,
+    };
   }
 
   async logout(userId: number) {

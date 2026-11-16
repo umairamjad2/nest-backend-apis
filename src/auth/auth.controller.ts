@@ -139,6 +139,16 @@ export class AuthController {
     this.setRefreshCookie(res, refresh_token);
     return body;
   }
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @ApiOperation({ summary: 'Start a demo: creates a temporary account with sample tasks and logs it in' })
+  @Post('demo')
+  @HttpCode(200)
+  async demo(@Res({ passthrough: true }) res: ExpressResponse) {
+    const { refresh_token, ...body } = await this.authService.startDemo();
+    this.setRefreshCookie(res, refresh_token);
+    return body;
+  }
+
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Log out, revoke all tokens and clear the refresh_token cookie' })
