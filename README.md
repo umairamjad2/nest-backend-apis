@@ -2,6 +2,12 @@
 
 A backend learning project built with **NestJS, TypeScript, PostgreSQL, and Prisma ORM**. This project implements user management, secure authentication, email verification, password reset, JWT access and refresh tokens, role-based authorization, rate limiting, and Swagger API documentation.
 
+This is the API behind **TaskNest**, a full-stack task manager.
+
+- 🔗 **Live app:** https://nest-frontend-apis.vercel.app
+- ⚙️ **API:** https://nest-backend-apis.vercel.app (protected routes return `401` without a token)
+- 🎨 **Frontend repo:** https://github.com/umairamjad2/nest-frontend-apis
+
 ## Tech Stack
 
 - **NestJS** – Backend framework
@@ -14,7 +20,7 @@ A backend learning project built with **NestJS, TypeScript, PostgreSQL, and Pris
 - **SHA-256 (Node.js crypto)** – Refresh, password reset, and email verification token hashing
 - **Class Validator** – Request validation
 - **Nodemailer** – Verification and password reset emails
-- **NestJS Throttler** – Rate limiting
+- **Custom throttle guard** – Rate limiting (replaces `@nestjs/throttler`, which can't load in Vercel's serverless runtime)
 - **Swagger (OpenAPI)** – API documentation
 - **Vitest** – Testing
 - **pnpm** – Package manager
