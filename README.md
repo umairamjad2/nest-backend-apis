@@ -42,6 +42,8 @@ This is the API behind **TaskNest**, a full-stack task manager.
 - User login with email and password
 - Forgot password and reset password by email
 - `forgot-password` gives the same response whether or not the email exists
+- Change password while logged in (needs the current password). Signs out every other device and sends a "password changed" email
+- Delete your own account (needs your password). The last admin can't delete their own account
 - Password hashing using bcrypt
 - JWT-based authentication
 - Protected API endpoints
@@ -58,16 +60,24 @@ Implemented security features:
 - Separate access and refresh token secrets
 - Refresh token is sent in an `httpOnly` cookie (`refresh_token`, path `/auth`), so frontend JavaScript cannot read it
 - Refresh tokens are hashed with SHA-256 before database storage
-- Every refresh token has a unique ID (`jti`), stored in `refreshTokenJti`
+- Every refresh token has a unique ID (`jti`), stored on its session
 - Refresh token rotation: every refresh returns a new token and the old one stops working
 - Atomic rotation, so one refresh token cannot be used twice by concurrent requests
-- Reuse detection: sending an old refresh token ends the user's session
-- Refresh token revocation on logout and password reset
-- Immediate access token invalidation using token versioning
+- Reuse detection: sending an old refresh token ends that session
+- Immediate access token revocation: access tokens carry their session ID (`sid`), and every request checks that the session still exists
 
-Each user has one active session, so logging in on a new device invalidates the previous device's refresh token.
+### 4. Multi-Device Sessions
 
-### 4. Role-Based Access Control (RBAC)
+Each login creates a row in the `Session` table, so a user can be logged in on several devices at once.
+
+- Each session stores its own refresh token hash and `jti`, the device's user agent and IP, and when it was last used
+- `GET /auth/sessions` lists the user's devices and marks the current one
+- Users can sign out one device, or every device except the current one
+- Logout ends only the current device's session
+- Changing the password signs out every other device; resetting it signs out all devices
+- Sessions expire 7 days after their last refresh, and a user can have at most 10 (logging in on an 11th device ends the least recently used one)
+
+### 5. Role-Based Access Control (RBAC)
 
 Two user roles are supported:
 
@@ -80,26 +90,28 @@ Implemented using:
 - `JwtAuthGuard`
 - `SelfOrAdminGuard` – allows admins or the user who owns the account
 
-### 5. Request Validation
+### 6. Request Validation
 
 Uses `class-validator`, `class-transformer`, and NestJS `ValidationPipe` to validate incoming requests and reject unexpected properties.
 
-### 6. CORS
+### 7. CORS
 
 Only the frontend at `FRONTEND_URL` (default `http://localhost:3001`) may call the API from a browser, with cookies allowed.
 
-### 7. Rate Limiting
+### 8. Rate Limiting
 
 | Endpoint | Limit |
 |---|---|
 | `POST /auth/login` | 5 requests per minute |
 | `POST /auth/register` | 5 requests per minute |
 | `POST /auth/forgot-password` | 3 requests per minute |
+| `POST /auth/change-password` | 5 requests per minute |
+| `DELETE /auth/account` | 5 requests per minute |
 | All other endpoints | 10 requests per minute |
 
 Requests over the limit receive `429 Too Many Requests`.
 
-### 8. API Documentation
+### 9. API Documentation
 
 Interactive Swagger documentation is available at `/api`, and the OpenAPI JSON at `/api-json`. Both are disabled when `NODE_ENV` is `production`.
 
@@ -224,7 +236,12 @@ pnpm exec prisma studio
 | POST | `/auth/refresh` | Return a new access token and set a new refresh cookie | Public, needs refresh cookie |
 | POST | `/auth/forgot-password` | Email a password reset link | Public |
 | POST | `/auth/reset-password` | Set a new password using a reset token | Public |
-| POST | `/auth/logout` | Log out, revoke tokens and clear the refresh cookie | Logged in |
+| POST | `/auth/logout` | Log out this device and clear the refresh cookie | Logged in |
+| POST | `/auth/change-password` | Change the password (`currentPassword`, `newPassword`); signs out other devices | Logged in |
+| GET | `/auth/sessions` | List logged-in devices (`current: true` marks this one) | Logged in |
+| DELETE | `/auth/sessions/:id` | Sign out one device | Logged in |
+| DELETE | `/auth/sessions` | Sign out every device except this one | Logged in |
+| DELETE | `/auth/account` | Delete your own account and tasks (body: `password`) | Logged in |
 | GET | `/auth/profile` | Get authenticated user profile | Logged in |
 | GET | `/auth/admin` | Admin-only endpoint | Admin |
 
@@ -251,7 +268,7 @@ The refresh token never appears in a response body. Login and refresh set it as 
 Set-Cookie: refresh_token=...; Max-Age=604800; Path=/auth; HttpOnly; SameSite=Lax
 ```
 
-`POST /auth/refresh` takes no body. It reads the cookie, returns `{ "access_token": "..." }`, and replaces the cookie with a new one. Reusing an old refresh token returns `401 Refresh token already used` and ends the session, so the user must log in again.
+`POST /auth/refresh` takes no body. It reads the cookie, returns `{ "access_token": "..." }`, and replaces the cookie with a new one. Reusing an old refresh token returns `401 Refresh token reuse detected` and ends that session, so that device must log in again.
 
 ### Frontend Requirements
 
@@ -265,16 +282,16 @@ Set-Cookie: refresh_token=...; Max-Age=604800; Path=/auth; HttpOnly; SameSite=La
 2. Password is hashed using bcrypt and a verification email is sent. The link is valid for 24 hours.
 3. User verifies their email.
 4. User logs in with email and password.
-5. Server returns an access token and sets the refresh token as an `httpOnly` cookie.
-6. A SHA-256 hash of the refresh token and its `jti` are stored in PostgreSQL.
-7. Access token is used to access protected APIs.
+5. Server creates a session for this device, returns an access token and sets the refresh token as an `httpOnly` cookie. Both tokens carry the session ID.
+6. A SHA-256 hash of the refresh token and its `jti` are stored on the session in PostgreSQL.
+7. Access token is used to access protected APIs. Each request checks that its session still exists.
 8. When the access token expires, the refresh token generates new tokens.
-9. Refresh token rotation replaces the stored hash and `jti`, so the old refresh token stops working.
-10. If an old refresh token is reused, the session is ended and the user's token version is incremented.
-11. On logout, the refresh token is removed, the cookie is cleared, and the user's token version is incremented.
-12. Old access tokens are rejected by the authentication strategy.
+9. Refresh token rotation replaces the session's stored hash and `jti`, so the old refresh token stops working.
+10. If an old refresh token is reused, that session is deleted.
+11. On logout, the session is deleted and the cookie is cleared. Other devices stay logged in.
+12. Access tokens of a deleted session are rejected straight away by the authentication strategy.
 
-Password reset links are valid for 15 minutes. A successful reset also ends all of the user's sessions.
+Password reset links are valid for 15 minutes. A successful reset ends all of the user's sessions.
 
 ## Role-Based Authorization
 
@@ -404,15 +421,15 @@ Key concepts practiced:
 - Authentication guards
 - Role-based authorization
 - Database-backed token revocation
-- Email verification and password reset
+- Multi-device sessions
+- Email verification, password reset and password change
 - Rate limiting
 - Swagger API documentation
 
 ## Future Improvements
 
 - Configurable backend URL for email verification links
-- Multi-device sessions with a `RefreshToken` table
-- Change password and change email flows
+- Change email flow
 - Automated auth testing
 - Production deployment
 

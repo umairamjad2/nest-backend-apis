@@ -17,13 +17,10 @@ enum Role {
 }
 model User {
   id        Int      @id @default(autoincrement())
-  tokenVersion Int @default(0)
   name      String
   email     String   @unique
   password  String
   role      Role     @default(USER)
-  refreshToken    String?
-  refreshTokenJti String?
   isEmailVerified Boolean @default(false)
   emailVerificationToken   String?
   emailVerificationExpires DateTime?
@@ -31,6 +28,25 @@ model User {
   resetPasswordExpires DateTime?
   createdAt DateTime @default(now())
   tasks     Task[]
+  sessions  Session[]
+}
+
+// One row per logged-in device. Access tokens carry the session id, so deleting
+// the row ends that device's session at once (refresh and access token).
+model Session {
+  id               String   @id @default(uuid())
+  userId           Int
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // SHA-256 of the current refresh token, and its unique ID (rotated on every refresh)
+  refreshTokenHash String
+  refreshTokenJti  String
+  userAgent        String?
+  ipAddress        String?
+  createdAt        DateTime @default(now())
+  lastUsedAt       DateTime @default(now())
+  expiresAt        DateTime
+
+  @@index([userId])
 }
 
 enum TaskStatus {

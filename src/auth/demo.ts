@@ -2,8 +2,7 @@ import { TaskPriority, TaskStatus } from '../generated/prisma/enums.js';
 
 // Demo accounts: "Try demo" on the frontend creates a fresh, throwaway user with
 // sample tasks, so visitors can look around without registering. Each visitor
-// gets their own account (one shared account would log visitors out of each
-// other, since a user has one session at a time).
+// gets their own account, so visitors never see or change each other's tasks.
 
 /** `.invalid` is a reserved domain, so no email can ever be delivered to it. */
 export const DEMO_EMAIL_DOMAIN = 'demo.tasknest.invalid';

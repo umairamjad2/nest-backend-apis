@@ -13,46 +13,8 @@ import * as bcrypt from 'bcrypt';
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
-  //RefreshToken
-  async updateRefreshToken(
-    userId: number,
-    hashedRefreshToken: string | null,
-    jti: string | null,
-  ) {
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        refreshToken: hashedRefreshToken,
-        refreshTokenJti: jti,
-      },
-    });
-  }
-  // Replaces the token only if oldJti is still current, so one token can't be rotated twice
-  async rotateRefreshToken(
-    userId: number,
-    oldJti: string,
-    newHash: string,
-    newJti: string,
-  ) {
-    const { count } = await this.prisma.user.updateMany({
-      where: { id: userId, refreshTokenJti: oldJti },
-      data: { refreshToken: newHash, refreshTokenJti: newJti },
-    });
+  // Refresh tokens live on the Session model now: see auth/sessions.service.ts
 
-    return count === 1;
-  }
-  async invalidateUserTokens(userId: number) {
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        refreshToken: null,
-        refreshTokenJti: null,
-        tokenVersion: {
-          increment: 1,
-        },
-      },
-    });
-  }
   //Save Email Verification
   async saveEmailVerificationToken(
     userId: number,

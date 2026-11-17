@@ -11,6 +11,9 @@ import {
   Query,
   HttpCode,
   UnauthorizedException,
+  Delete,
+  Param,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import type {
   CookieOptions,
@@ -26,6 +29,10 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { CreateUserDto } from '../users/dto/create-user.dto.js';
 import { Throttle } from '../common/throttle/throttle.js';
+import { ChangePasswordDto } from './dto/change-password.dto.js';
+import { DeleteAccountDto } from './dto/delete-account.dto.js';
+import { CurrentUser, type AuthenticatedUser } from './decorators/current-user.decorator.js';
+import type { SessionMeta } from './sessions.service.js';
 import {
   ApiBearerAuth,
   ApiCookieAuth,
@@ -35,6 +42,14 @@ import {
 } from '@nestjs/swagger';
 
 const REFRESH_COOKIE = 'refresh_token';
+
+// Shown on the "Logged-in devices" list
+function sessionMeta(req: ExpressRequest): SessionMeta {
+  return {
+    userAgent: req.headers['user-agent'],
+    ipAddress: req.ip,
+  };
+}
 
 // httpOnly: JavaScript can't read it. path: only sent to the auth routes.
 // Behind the frontend's /api proxy the browser sees /api/auth, so the path is configurable.
@@ -133,9 +148,10 @@ export class AuthController {
   @HttpCode(200)
   async login(
     @Body() dto: LoginUserDto,
+    @Req() req: ExpressRequest,
     @Res({ passthrough: true }) res: ExpressResponse,
   ) {
-    const { refresh_token, ...body } = await this.authService.login(dto);
+    const { refresh_token, ...body } = await this.authService.login(dto, sessionMeta(req));
     this.setRefreshCookie(res, refresh_token);
     return body;
   }
@@ -143,23 +159,95 @@ export class AuthController {
   @ApiOperation({ summary: 'Start a demo: creates a temporary account with sample tasks and logs it in' })
   @Post('demo')
   @HttpCode(200)
-  async demo(@Res({ passthrough: true }) res: ExpressResponse) {
-    const { refresh_token, ...body } = await this.authService.startDemo();
+  async demo(
+    @Req() req: ExpressRequest,
+    @Res({ passthrough: true }) res: ExpressResponse,
+  ) {
+    const { refresh_token, ...body } = await this.authService.startDemo(sessionMeta(req));
     this.setRefreshCookie(res, refresh_token);
     return body;
   }
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Log out, revoke all tokens and clear the refresh_token cookie' })
+  @ApiOperation({ summary: 'Log out this device and clear the refresh_token cookie' })
   @ApiUnauthorizedResponse({ description: 'Missing, invalid or revoked access token' })
   @Post('logout')
   logout(
-    @Request() req: any,
+    @CurrentUser() user: AuthenticatedUser,
     @Res({ passthrough: true }) res: ExpressResponse,
   ) {
     this.clearRefreshCookie(res);
-    return this.authService.logout(req.user.userId);
+    return this.authService.logout(user.userId, user.sessionId);
+  }
+
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Change your password. Signs out every other device; this one stays logged in' })
+  @ApiUnauthorizedResponse({ description: 'Missing, invalid or revoked access token' })
+  @Post('change-password')
+  @HttpCode(200)
+  changePassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(
+      user.userId,
+      user.sessionId,
+      dto.currentPassword,
+      dto.newPassword,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List your logged-in devices. The one making the request has current: true' })
+  @ApiUnauthorizedResponse({ description: 'Missing, invalid or revoked access token' })
+  @Get('sessions')
+  listSessions(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.listSessions(user.userId, user.sessionId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Sign out every device except this one' })
+  @ApiUnauthorizedResponse({ description: 'Missing, invalid or revoked access token' })
+  @Delete('sessions')
+  revokeOtherSessions(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.revokeOtherSessions(user.userId, user.sessionId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Sign out one of your devices' })
+  @ApiUnauthorizedResponse({ description: 'Missing, invalid or revoked access token' })
+  @Delete('sessions/:id')
+  async revokeSession(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Res({ passthrough: true }) res: ExpressResponse,
+  ) {
+    const result = await this.authService.revokeSession(user.userId, id);
+    // Signing out this device is the same as logging out
+    if (id === user.sessionId) this.clearRefreshCookie(res);
+    return result;
+  }
+
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete your own account, with all its tasks. Needs your password' })
+  @ApiUnauthorizedResponse({ description: 'Missing, invalid or revoked access token' })
+  @Delete('account')
+  async deleteAccount(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: DeleteAccountDto,
+    @Res({ passthrough: true }) res: ExpressResponse,
+  ) {
+    const result = await this.authService.deleteAccount(user.userId, dto.password);
+    this.clearRefreshCookie(res);
+    return result;
   }
 
   @UseGuards(JwtAuthGuard)
