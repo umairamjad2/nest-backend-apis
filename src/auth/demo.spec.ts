@@ -27,25 +27,26 @@ describe('AuthService.startDemo', () => {
         deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
         count: vi.fn().mockResolvedValue(activeDemos),
         create: vi.fn().mockImplementation(({ data }) =>
-          Promise.resolve({ id: 7, email: data.email, role: 'USER', tokenVersion: 0 }),
+          Promise.resolve({ id: 7, email: data.email, role: 'USER' }),
         ),
       },
     };
-    const usersService = { updateRefreshToken: vi.fn() };
+    const sessionsService = { create: vi.fn() };
     const jwtService = { signAsync: vi.fn().mockResolvedValue('signed.jwt') };
     const config = { get: vi.fn().mockReturnValue('secret') };
     const service = new AuthService(
-      usersService as never,
+      {} as never,
       jwtService as never,
       config as never,
       prisma as never,
       {} as never,
+      sessionsService as never,
     );
-    return { service, prisma, usersService };
+    return { service, prisma, sessionsService };
   }
 
   it('creates a verified demo user with sample tasks and returns tokens', async () => {
-    const { service, prisma, usersService } = setup();
+    const { service, prisma, sessionsService } = setup();
 
     const result = await service.startDemo();
 
@@ -54,7 +55,9 @@ describe('AuthService.startDemo', () => {
     expect(data.isEmailVerified).toBe(true);
     expect(data.role).toBeUndefined(); // default USER, never ADMIN
     expect(data.tasks.create.length).toBeGreaterThan(0);
-    expect(usersService.updateRefreshToken).toHaveBeenCalledWith(7, expect.any(String), expect.any(String));
+    expect(sessionsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 7, refreshTokenHash: expect.any(String), refreshTokenJti: expect.any(String) }),
+    );
     expect(result).toMatchObject({ access_token: 'signed.jwt', refresh_token: 'signed.jwt' });
   });
 

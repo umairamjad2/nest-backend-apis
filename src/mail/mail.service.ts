@@ -76,4 +76,17 @@ export class MailService {
         });
     }
 
+    async sendPasswordChangedEmail(email: string, resetLink: string) {
+        return this.send({
+        to: email,
+        subject: 'Your Password Was Changed',
+        html: `
+            <h2>Password Changed</h2>
+            <p>The password for your account was just changed, and every other device was signed out.</p>
+            <p>If this was you, there's nothing else to do.</p>
+            <p>If it wasn't, reset your password right away: <a href="${resetLink}">Reset Password</a></p>
+            `,
+        });
+    }
+
 }

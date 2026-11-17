@@ -5,6 +5,8 @@ export interface AuthenticatedUser {
   userId: number;
   email: string;
   role: 'ADMIN' | 'USER';
+  /** The Session this request's access token belongs to (one per logged-in device). */
+  sessionId: string;
 }
 
 /**
